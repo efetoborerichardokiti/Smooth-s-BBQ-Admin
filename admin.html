@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smooth's BBQ — Order Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;1,400;1,600&display=swap" rel="stylesheet">
+  <script>
+    /*
+      =============================================
+      PASTE YOUR SUPABASE CREDENTIALS HERE
+      =============================================
+    */
+    const SUPABASE_URL = 'https://spfwssoncnjjcnbwhnml.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNwZndzc29uY25qamNuYndobm1sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczNTU5MDIsImV4cCI6MjEwMjkzMTkwMn0.VZuDf_YQIC7fjKq2ceGrOLCumB-DAOJ8TqwpBKLoD0o';
+  </script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { fontFamily: { sans: ['Inter','sans-serif'], 'serif-display': ['"Playfair Display"','serif'] } } }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .font-serif-display { font-family: 'Playfair Display', serif; }
+    @keyframes spin-slow { to { transform: rotate(360deg); } }
+    .spin-slow { animation: spin-slow 1s linear infinite; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+    .toast-anim { animation: slideIn 0.4s ease-out, fadeOut 0.4s ease-in 2.6s forwards; }
+    .order-card { transition: all 0.3s; }
+    .order-card:hover { border-color: rgba(245,158,11,0.3); }
+  </style>
+</head>
+<body class="bg-[#0B1221] text-white min-h-screen">
+
+  <div id="toast-container" class="fixed top-6 right-6 z-50 flex flex-col gap-3"></div>
+
+  <!-- Header -->
+  <header class="bg-[#080d19] border-b border-slate-800 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 bg-amber-500 rounded-lg flex items-center justify-center">
+          <i data-lucide="flame" class="w-4 h-4 text-[#0B1221]"></i>
+        </div>
+        <div>
+          <span class="text-sm font-semibold">Smooth's BBQ</span>
+          <span class="hidden sm:block text-[10px] uppercase tracking-widest text-amber-400/80 -mt-0.5">Order Dashboard</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="hidden sm:flex items-center gap-2 text-xs text-slate-500">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="refresh-icon"></i>
+          <span id="refresh-text">30s</span>
+        </div>
+        <button onclick="loadOrders()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-medium py-2 px-4 rounded-lg transition flex items-center gap-2">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Refresh
+        </button>
+        <a href="index.html" class="hidden sm:inline-flex bg-amber-500 hover:bg-amber-400 text-[#0B1221] text-xs font-semibold py-2 px-4 rounded-lg transition flex items-center gap-2">
+          <i data-lucide="external-link" class="w-3.5 h-3.5"></i> View Site
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Setup Warning -->
+  <div id="setup-warning" class="bg-red-500/10 border-b border-red-500/20 py-3 px-6 hidden">
+    <div class="max-w-7xl mx-auto flex items-start gap-3 text-sm text-red-400">
+      <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+      <span>Not connected. Open this file and replace <code class="bg-red-500/20 px-1.5 py-0.5 rounded text-xs">PASTE_YOUR_PROJECT_URL_HERE</code> and <code class="bg-red-500/20 px-1.5 py-0.5 rounded text-xs">PASTE_YOUR_ANON_KEY_HERE</code> with your Supabase credentials.</span>
+    </div>
+  </div>
+
+  <main class="max-w-7xl mx-auto px-6 py-8">
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div class="bg-[#151f32] border border-slate-800 rounded-xl p-5">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs text-slate-400 uppercase tracking-wider font-medium">New Orders</span>
+          <div class="bg-amber-500/10 p-2 rounded-lg"><i data-lucide="bell" class="w-4 h-4 text-amber-400"></i></div>
+        </div>
+        <div id="stat-new" class="text-3xl font-serif-display text-amber-400">0</div>
+      </div>
+      <div class="bg-[#151f32] border border-slate-800 rounded-xl p-5">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs text-slate-400 uppercase tracking-wider font-medium">Today's Revenue</span>
+          <div class="bg-green-500/10 p-2 rounded-lg"><i data-lucide="dollar-sign" class="w-4 h-4 text-green-400"></i></div>
+        </div>
+        <div id="stat-revenue" class="text-3xl font-serif-display text-green-400">$0</div>
+      </div>
+      <div class="bg-[#151f32] border border-slate-800 rounded-xl p-5">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs text-slate-400 uppercase tracking-wider font-medium">Total Orders</span>
+          <div class="bg-blue-500/10 p-2 rounded-lg"><i data-lucide="package" class="w-4 h-4 text-blue-400"></i></div>
+        </div>
+        <div id="stat-total" class="text-3xl font-serif-display text-blue-400">0</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-wrap items-center gap-2 mb-6">
+      <span class="text-xs text-slate-500 mr-2">Filter:</span>
+      <button onclick="setFilter('all')" class="filter-btn active bg-amber-500 text-[#0B1221] text-xs font-semibold py-1.5 px-4 rounded-full transition" data-f="all">All</button>
+      <button onclick="setFilter('New')" class="filter-btn bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold py-1.5 px-4 rounded-full transition" data-f="New">New</button>
+      <button onclick="setFilter('In Progress')" class="filter-btn bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold py-1.5 px-4 rounded-full transition" data-f="In Progress">In Progress</button>
+      <button onclick="setFilter('Completed')" class="filter-btn bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold py-1.5 px-4 rounded-full transition" data-f="Completed">Completed</button>
+    </div>
+
+    <!-- Orders -->
+    <div id="orders-container">
+      <div id="loading-state" class="text-center py-20">
+        <i data-lucide="loader-2" class="w-8 h-8 text-slate-600 mx-auto spin-slow mb-4"></i>
+        <p class="text-sm text-slate-500">Loading orders…</p>
+      </div>
+      <div id="empty-state" class="text-center py-20 hidden">
+        <i data-lucide="inbox" class="w-12 h-12 text-slate-700 mx-auto mb-4"></i>
+        <p class="text-sm text-slate-500">No orders yet. They'll appear here when customers order from the website.</p>
+      </div>
+      <div id="error-state" class="text-center py-20 hidden">
+        <i data-lucide="wifi-off" class="w-12 h-12 text-red-500/30 mx-auto mb-4"></i>
+        <p class="text-sm text-red-400 mb-2">Couldn't connect to database</p>
+        <p class="text-xs text-slate-500 mb-4">Check your Supabase URL and key are pasted correctly.</p>
+        <button onclick="loadOrders()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium py-2 px-4 rounded-lg transition">Try Again</button>
+      </div>
+      <div id="orders-list" class="space-y-4 hidden"></div>
+    </div>
+  </main>
+
+  <footer class="border-t border-slate-800 py-6 mt-12">
+    <div class="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-3">
+      <p class="text-xs text-slate-600">Smooth's BBQ — Order Dashboard</p>
+      <p class="text-xs text-slate-600">Powered by Supabase · Auto-refreshes every 30s</p>
+    </div>
+  </footer>
+
+  <script>
+    lucide.createIcons();
+
+    if (SUPABASE_URL.includes('PASTE_YOUR')) {
+      document.getElementById('setup-warning').classList.remove('hidden');
+    }
+
+    const headers = {
+      'apikey': SUPABASE_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    };
+
+    let orders = [];
+    let currentFilter = 'all';
+
+    // ===== LOAD =====
+    async function loadOrders() {
+      const icon = document.getElementById('refresh-icon');
+      icon.classList.add('spin-slow');
+      showState('loading');
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?order=created_at.desc`, { headers });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        orders = await res.json();
+        renderOrders();
+        updateStats();
+        showState(orders.length ? 'list' : 'empty');
+      } catch (err) {
+        console.error(err);
+        if (orders.length) { renderOrders(); showState('list'); showToast('Offline — showing cached', 'error'); }
+        else showState('error');
+      }
+      icon.classList.remove('spin-slow');
+    }
+
+    // ===== RENDER =====
+    function renderOrders() {
+      const filtered = currentFilter === 'all' ? orders : orders.filter(o => o.status === currentFilter);
+      const list = document.getElementById('orders-list');
+
+      if (!filtered.length) {
+        list.innerHTML = `<div class="text-center py-12"><p class="text-sm text-slate-500">No ${currentFilter === 'all' ? '' : currentFilter.toLowerCase() + ' '}orders.</p></div>`;
+        list.classList.remove('hidden');
+        return;
+      }
+
+      list.innerHTML = filtered.map((o, i) => {
+        const items = parseItems(o.items);
+        const sc = o.status === 'New' ? 'amber' : o.status === 'In Progress' ? 'blue' : 'green';
+        const statusColors = { New: 'text-amber-400', 'In Progress': 'text-blue-400', Completed: 'text-green-400' };
+        const borderColors = { New: 'border-amber-500/30', 'In Progress': 'border-blue-500/30', Completed: 'border-green-500/20' };
+        const bgColors = { New: 'bg-amber-500/5', 'In Progress': 'bg-blue-500/5', Completed: 'bg-green-500/5' };
+        const dotColors = { New: 'bg-amber-500', 'In Progress': 'bg-blue-500', Completed: 'bg-green-500' };
+        const time = o.created_at ? new Date(o.created_at).toLocaleString('en-CA', {timeZone:'America/Halifax'}) : '—';
+
+        return `
+          <div class="order-card ${bgColors[o.status] || ''} border ${borderColors[o.status] || 'border-slate-800'} rounded-xl p-5">
+            <div class="flex flex-col lg:flex-row lg:items-start gap-4">
+              <div class="flex-1 min-w-0">
+                <div class="flex flex-wrap items-center gap-3 mb-3">
+                  <span class="text-xs text-slate-500 font-mono">#${o.id}</span>
+                  <span class="text-xs text-slate-500">${time}</span>
+                  <span class="w-2 h-2 ${dotColors[o.status] || ''} rounded-full flex-shrink-0"></span>
+                  <span class="text-xs font-medium ${statusColors[o.status] || ''}">${o.status}</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <div class="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">Customer</div>
+                    <div class="text-sm font-medium">${o.name || '—'}</div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] uppercase tracking-wider text-slate-500 mb-0.5">Phone</div>
+                    <div class="text-sm">${o.phone ? `<a href="tel:${o.phone}" class="text-amber-400 hover:text-amber-300 transition">${o.phone}</a>` : '—'}</div>
+                  </div>
+                </div>
+                <div>
+                  <div class="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">Items</div>
+                  <div class="bg-[#0B1221] rounded-lg p-3 space-y-1">
+                    ${items.map(it => `<div class="flex justify-between text-xs"><span class="text-slate-300">${it.qty}× ${it.name}</span><span class="text-slate-400 font-mono">$${it.lineTotal.toFixed(2)}</span></div>`).join('')}
+                    <div class="border-t border-slate-700 mt-2 pt-2 flex justify-between text-sm font-semibold">
+                      <span>Total</span>
+                      <span class="text-amber-400 font-serif-display text-base">$${(parseFloat(o.total) || 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex flex-row lg:flex-col gap-2 lg:w-48 flex-shrink-0">
+                <select onchange="updateStatus(${o.id}, this.value)" class="w-full bg-[#0B1221] border border-slate-700 focus:border-amber-500 text-xs py-2 px-3 rounded-lg text-white outline-none transition appearance-none cursor-pointer">
+                  <option ${o.status==='New'?'selected':''}>New</option>
+                  <option ${o.status==='In Progress'?'selected':''}>In Progress</option>
+                  <option ${o.status==='Completed'?'selected':''}>Completed</option>
+                </select>
+                ${o.status !== 'Completed' ? `<button onclick="updateStatus(${o.id}, 'Completed')" class="flex-1 bg-green-500/10 hover:bg-green-500/20 text-green-400 text-xs font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5"></i> Complete</button>` : ''}
+                <button onclick="deleteOrder(${o.id})" class="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-1.5"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete</button>
+                ${o.phone ? `<a href="tel:${o.phone}" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium py-2 px-3 rounded-lg transition flex items-center justify-center gap-1.5"><i data-lucide="phone" class="w-3.5 h-3.5"></i> Call</a>` : ''}
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+
+      list.classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    // ===== PARSE ITEMS =====
+    function parseItems(str) {
+      if (!str) return [];
+      return str.split('\n').filter(l => l.trim()).map(line => {
+        const m = line.match(/(\d+)x\s+(.+?)\s+\$([\d.]+)/);
+        if (m) return { qty: parseInt(m[1]), name: m[2].trim(), lineTotal: parseFloat(m[3]) };
+        return { qty: 1, name: line.trim(), lineTotal: 0 };
+      });
+    }
+
+    // ===== UPDATE STATUS =====
+    async function updateStatus(id, status) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
+          method: 'PATCH', headers, body: JSON.stringify({ status })
+        });
+        if (!res.ok) throw new Error();
+        showToast(`Order #${id} → ${status}`);
+        loadOrders();
+      } catch { showToast('Failed to update', 'error'); }
+    }
+
+    // ===== DELETE =====
+    async function deleteOrder(id) {
+      if (!confirm(`Delete order #${id}?`)) return;
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${id}`, {
+          method: 'DELETE', headers
+        });
+        if (!res.ok) throw new Error();
+        showToast('Order deleted');
+        loadOrders();
+      } catch { showToast('Failed to delete', 'error'); }
+    }
+
+    // ===== STATS =====
+    function updateStats() {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' });
+      const newCount = orders.filter(o => o.status === 'New').length;
+      const todayRev = orders
+        .filter(o => o.created_at && new Date(o.created_at).toLocaleDateString('en-CA', {timeZone:'America/Halifax'}) === today)
+        .reduce((s, o) => s + (parseFloat(o.total) || 0), 0);
+      document.getElementById('stat-new').textContent = newCount;
+      document.getElementById('stat-revenue').textContent = `$${todayRev.toFixed(0)}`;
+      document.getElementById('stat-total').textContent = orders.length;
+    }
+
+    // ===== FILTER =====
+    function setFilter(f) {
+      currentFilter = f;
+      document.querySelectorAll('.filter-btn').forEach(b => {
+        b.className = b.dataset.f === f
+          ? 'filter-btn active bg-amber-500 text-[#0B1221] text-xs font-semibold py-1.5 px-4 rounded-full transition'
+          : 'filter-btn bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-semibold py-1.5 px-4 rounded-full transition';
+      });
+      if (orders.length) renderOrders();
+    }
+
+    // ===== STATE =====
+    function showState(s) {
+      document.getElementById('loading-state').classList.toggle('hidden', s !== 'loading');
+      document.getElementById('empty-state').classList.toggle('hidden', s !== 'empty');
+      document.getElementById('error-state').classList.toggle('hidden', s !== 'error');
+      document.getElementById('orders-list').classList.toggle('hidden', s !== 'list');
+    }
+
+    // ===== TOAST =====
+    function showToast(msg, type = 'success') {
+      const t = document.createElement('div');
+      t.className = 'toast-anim bg-[#151f32] border border-slate-700 rounded-xl px-5 py-3 flex items-center gap-3 shadow-2xl max-w-sm';
+      t.innerHTML = `<i data-lucide="${type==='success'?'check-circle':'alert-circle'}" class="w-4 h-4 ${type==='success'?'text-green-400':'text-red-400'} flex-shrink-0"></i><span class="text-sm text-slate-200">${msg}</span>`;
+      document.getElementById('toast-container').appendChild(t);
+      lucide.createIcons();
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    // ===== INIT =====
+    if (!SUPABASE_URL.includes('PASTE_YOUR')) {
+      loadOrders();
+      setInterval(loadOrders, 30000);
+    }
+  </script>
+</body>
+</html>
